@@ -1,0 +1,2839 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Night Shift — lofi rooftop workstation</title>
+    <style>
+      :root {
+        --ink: #04060b;
+        --dust: #c6d2e4;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        background: var(--ink);
+        color: var(--dust);
+        font-family:
+          'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+        overflow: hidden;
+        -webkit-font-smoothing: antialiased;
+      }
+      #stage {
+        position: fixed;
+        inset: 0;
+      }
+      canvas {
+        position: absolute;
+        inset: 0;
+        display: block;
+      }
+      #curtain {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1.3rem;
+        background: radial-gradient(
+          120% 100% at 50% 40%,
+          #0a101c 0%,
+          #04060b 72%
+        );
+        transition: opacity 0.9s ease;
+      }
+      #curtain.gone {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #curtain h1 {
+        margin: 0;
+        font-size: clamp(1.6rem, 4.4vw, 2.9rem);
+        font-weight: 400;
+        letter-spacing: 0.04em;
+        color: #dee6f3;
+      }
+      #curtain p {
+        margin: 0;
+        max-width: 36ch;
+        text-align: center;
+        line-height: 1.65;
+        font-size: clamp(0.86rem, 2.2vw, 1rem);
+        color: #7c8aa3;
+      }
+      #go {
+        margin-top: 0.3rem;
+        padding: 0.72rem 1.9rem;
+        font: inherit;
+        font-size: 1rem;
+        letter-spacing: 0.05em;
+        color: #0a0d15;
+        background: linear-gradient(180deg, #eec489, #d79f57);
+        border: 0;
+        border-radius: 999px;
+        cursor: pointer;
+        box-shadow: 0 10px 30px rgba(215, 159, 87, 0.2);
+        transition:
+          transform 0.2s ease,
+          box-shadow 0.2s ease;
+      }
+      #go:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 14px 36px rgba(215, 159, 87, 0.3);
+      }
+      #go:focus-visible {
+        outline: 2px solid #eec489;
+        outline-offset: 4px;
+      }
+      #deck {
+        position: fixed;
+        z-index: 15;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: max(14px, env(safe-area-inset-bottom));
+        display: flex;
+        align-items: center;
+        gap: 0.7rem;
+        padding: 0.5rem 0.9rem;
+        border-radius: 999px;
+        background: rgba(8, 12, 20, 0.6);
+        border: 1px solid rgba(180, 200, 230, 0.12);
+        backdrop-filter: blur(8px);
+        opacity: 0;
+        transition: opacity 0.5s ease;
+      }
+      #deck.show {
+        opacity: 0.9;
+      }
+      #deck:hover {
+        opacity: 1;
+      }
+      .btn {
+        font: inherit;
+        font-size: 0.8rem;
+        letter-spacing: 0.03em;
+        color: #c0cde1;
+        background: transparent;
+        border: 1px solid rgba(180, 200, 230, 0.2);
+        border-radius: 999px;
+        padding: 0.28rem 0.74rem;
+        cursor: pointer;
+      }
+      .btn[aria-pressed='true'] {
+        color: #0a0d15;
+        background: #ccdbef;
+        border-color: #ccdbef;
+      }
+      .btn:focus-visible {
+        outline: 2px solid #e6a45c;
+        outline-offset: 3px;
+      }
+      .sl {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.7rem;
+        color: #8896ae;
+      }
+      input[type='range'] {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 70px;
+        height: 3px;
+        border-radius: 2px;
+        background: rgba(190, 208, 235, 0.25);
+      }
+      input[type='range']::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        background: #e6a45c;
+        cursor: pointer;
+      }
+      input[type='range']::-moz-range-thumb {
+        width: 11px;
+        height: 11px;
+        border: 0;
+        border-radius: 50%;
+        background: #e6a45c;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="stage"><canvas id="c"></canvas></main>
+
+    <div id="curtain">
+      <h1>Night shift</h1>
+      <p>
+        Top floor, glass wall, one pane cracked open. The city is what the eye
+        is resting on — everything inside sits softly out of focus. Sound starts
+        when you do.
+      </p>
+      <button id="go">Start the night</button>
+    </div>
+
+    <div id="deck" role="group" aria-label="Sound controls">
+      <button class="btn" id="mMusic" aria-pressed="true">Music</button>
+      <button class="btn" id="mBeat" aria-pressed="true">Beat</button>
+      <button class="btn" id="mRain" aria-pressed="true">Rain</button>
+      <label class="sl"
+        >Vol
+        <input
+          id="vol"
+          type="range"
+          min="0"
+          max="100"
+          value="70"
+          aria-label="Volume"
+      /></label>
+    </div>
+
+    <script>
+      (function () {
+        'use strict';
+
+        /* ============================================================
+   CANVAS LAYERS
+   far  — everything beyond the glass, rendered sharp (the eye is out there)
+   mid  — the room, desk, screens: composited through a lens blur
+   near — the chair in the foreground: heavily defocused
+   ============================================================ */
+        const W = 1600,
+          H = 900;
+        const main = document.getElementById('c');
+        const mainCtx = main.getContext('2d', { alpha: false });
+        function mk(w, h) {
+          const c = document.createElement('canvas');
+          c.width = w;
+          c.height = h;
+          return c;
+        }
+        const farC = mk(W, H),
+          fctx = farC.getContext('2d');
+        const midC = mk(W, H),
+          mctx = midC.getContext('2d');
+        const nearC = mk(W, H),
+          nctx = nearC.getContext('2d');
+        const bloomC = mk(360, 202),
+          bctx = bloomC.getContext('2d');
+        let ctx =
+          mainCtx; /* the active target — draw helpers all write to this */
+
+        const CAN_BLUR = (function () {
+          const t = mk(4, 4).getContext('2d');
+          t.filter = 'blur(2px)';
+          return t.filter === 'blur(2px)';
+        })();
+
+        let view = { s: 1, ox: 0, oy: 0 },
+          small = false;
+        function resize() {
+          const dpr = Math.min(window.devicePixelRatio || 1, 2);
+          const vw = window.innerWidth,
+            vh = window.innerHeight;
+          small = vw < 760;
+          main.width = Math.round(vw * dpr);
+          main.height = Math.round(vh * dpr);
+          main.style.width = vw + 'px';
+          main.style.height = vh + 'px';
+          const s = Math.min(vw / W, vh / H) * dpr;
+          view = { s, ox: (vw * dpr - W * s) / 2, oy: (vh * dpr - H * s) / 2 };
+        }
+        window.addEventListener('resize', resize, { passive: true });
+        resize();
+
+        /* ---------- helpers ---------- */
+        function mulberry(a) {
+          return function () {
+            a |= 0;
+            a = (a + 0x6d2b79f5) | 0;
+            let t = Math.imul(a ^ (a >>> 15), 1 | a);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+          };
+        }
+        const R = mulberry(20260919);
+        const rnd = (a, b) => a + (b - a) * R();
+        const lerp = (a, b, t) => a + (b - a) * t;
+
+        function rr(x, y, w, h, r) {
+          r = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
+          ctx.beginPath();
+          ctx.moveTo(x + r, y);
+          ctx.arcTo(x + w, y, x + w, y + h, r);
+          ctx.arcTo(x + w, y + h, x, y + h, r);
+          ctx.arcTo(x, y + h, x, y, r);
+          ctx.arcTo(x, y, x + w, y, r);
+          ctx.closePath();
+        }
+        function poly(p) {
+          ctx.beginPath();
+          ctx.moveTo(p[0][0], p[0][1]);
+          for (let i = 1; i < p.length; i++) ctx.lineTo(p[i][0], p[i][1]);
+          ctx.closePath();
+        }
+        function qp(q, u, v) {
+          const x =
+            (1 - u) * (1 - v) * q[0][0] +
+            u * (1 - v) * q[1][0] +
+            u * v * q[2][0] +
+            (1 - u) * v * q[3][0];
+          const y =
+            (1 - u) * (1 - v) * q[0][1] +
+            u * (1 - v) * q[1][1] +
+            u * v * q[2][1] +
+            (1 - u) * v * q[3][1];
+          return [x, y];
+        }
+        const qsub = (q, u0, v0, u1, v1) => [
+          qp(q, u0, v0),
+          qp(q, u1, v0),
+          qp(q, u1, v1),
+          qp(q, u0, v1),
+        ];
+        function qfill(q, f) {
+          poly(q);
+          ctx.fillStyle = f;
+          ctx.fill();
+        }
+        function glow(x, y, r, color, alpha) {
+          const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+          g.addColorStop(0, color);
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.globalAlpha = alpha;
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(x, y, r, 0, 6.283);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+        function spr(rgb) {
+          const c = mk(64, 64),
+            g = c.getContext('2d');
+          const rg = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+          rg.addColorStop(0, 'rgba(' + rgb + ',1)');
+          rg.addColorStop(0.4, 'rgba(' + rgb + ',.3)');
+          rg.addColorStop(1, 'rgba(' + rgb + ',0)');
+          g.fillStyle = rg;
+          g.fillRect(0, 0, 64, 64);
+          return c;
+        }
+        const S_WARM = spr('255,186,112'),
+          S_COOL = spr('168,204,255'),
+          S_SODIUM = spr('255,158,72');
+        function sglow(s, x, y, r, a) {
+          ctx.globalAlpha = a;
+          ctx.drawImage(s, x - r, y - r, r * 2, r * 2);
+          ctx.globalAlpha = 1;
+        }
+        /* soft contact shadow under an object */
+        function contact(x, y, rx, ry, a) {
+          const g = ctx.createRadialGradient(x, y, 0, x, y, rx);
+          g.addColorStop(0, 'rgba(2,4,8,' + a + ')');
+          g.addColorStop(1, 'rgba(2,4,8,0)');
+          ctx.fillStyle = g;
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.scale(1, ry / rx);
+          ctx.beginPath();
+          ctx.arc(0, 0, rx, 0, 6.283);
+          ctx.fill();
+          ctx.restore();
+        }
+
+        /* ---------- geometry ---------- */
+        const WIN = { x: 238, y: 112, w: 1124, h: 516 };
+        const WALL = { x1: 188, y1: 52, x2: 1412, y2: 778 };
+        const LWALL = [
+          [0, -10],
+          [188, 52],
+          [188, 778],
+          [0, 912],
+        ];
+        const RWALL = [
+          [1412, 52],
+          [1600, -10],
+          [1600, 912],
+          [1412, 778],
+        ];
+        const CEIL = [
+          [0, -10],
+          [188, 52],
+          [1412, 52],
+          [1600, -10],
+        ];
+        const FLOOR = [
+          [188, 778],
+          [1412, 778],
+          [1600, 912],
+          [0, 912],
+        ];
+
+        /* ============================================================
+   WORLD BEYOND THE GLASS
+   ============================================================ */
+        const stars = [];
+        for (let i = 0; i < 260; i++)
+          stars.push({
+            x: rnd(WIN.x - 40, WIN.x + WIN.w + 40),
+            y: rnd(WIN.y - 30, WIN.y + 330),
+            r: rnd(0.45, 1.7),
+            a: rnd(0.2, 0.95),
+            tw: rnd(0.3, 1.7),
+            ph: rnd(0, 6.28),
+          });
+        const clouds = [];
+        for (let i = 0; i < 9; i++)
+          clouds.push({
+            x: rnd(-300, 1800),
+            y: rnd(130, 360),
+            w: rnd(300, 760),
+            h: rnd(34, 88),
+            a: rnd(0.035, 0.11),
+            sp: rnd(2, 7),
+          });
+
+        function band(xs, xe, baseY, minH, maxH, depth) {
+          const arr = [];
+          let x = xs;
+          const tints =
+            depth === 0
+              ? ['#101828', '#0e1524', '#121a2a']
+              : ['#090e1a', '#0b1120', '#070c16'];
+          while (x < xe) {
+            const w = rnd(64, 152),
+              h = rnd(minH, maxH);
+            const b = {
+              x,
+              w,
+              y: baseY - h,
+              h,
+              tint: tints[Math.floor(R() * tints.length)],
+              strip: R() < 0.3,
+              tank: R() < 0.32,
+              antenna: R() < 0.22,
+              ac: R() < 0.4,
+              wins: [],
+            };
+            const cols = Math.max(2, Math.floor(w / (b.strip ? 26 : 21)));
+            const rows = Math.max(3, Math.floor(h / 24));
+            const padX = (w - cols * 12) / (cols + 1);
+            const rh = (h - 22) / rows;
+            for (let r = 0; r < rows; r++)
+              for (let c = 0; c < cols; c++) {
+                b.wins.push({
+                  x: b.x + padX + c * (12 + padX),
+                  y: b.y + 14 + r * rh,
+                  w: b.strip ? 12 + padX * 0.7 : 10,
+                  h: Math.min(12, rh - 7),
+                  lit: R() < (depth === 0 ? 0.12 : 0.16),
+                  warm: R() < 0.76,
+                  br: rnd(0.4, 1),
+                  tf: rnd(0.02, 0.14),
+                  tp: rnd(0, 6.28),
+                  blink: R() < 0.1,
+                  curtain: R() < 0.35,
+                });
+              }
+            arr.push(b);
+            x += w + rnd(5, 20);
+          }
+          return arr;
+        }
+        const skylineB = band(
+          WIN.x - 120,
+          WIN.x + WIN.w + 120,
+          470,
+          60,
+          150,
+          -1
+        ); /* hazy distance */
+        const farB = band(WIN.x - 100, WIN.x + WIN.w + 100, 528, 110, 270, 0);
+        const nearB = band(WIN.x - 120, WIN.x + WIN.w + 120, 586, 180, 410, 1);
+
+        const ROADY = 590,
+          ROADB = 636;
+        const lamps = [],
+          trees = [],
+          shops = [];
+        for (let x = WIN.x - 40; x < WIN.x + WIN.w + 60; x += rnd(116, 158))
+          lamps.push({ x, y: ROADY + 6, h: rnd(32, 42), ph: rnd(0, 6.28) });
+        for (let x = WIN.x + 20; x < WIN.x + WIN.w + 40; x += rnd(88, 138))
+          trees.push({
+            x,
+            y: ROADY + 10,
+            r: rnd(14, 23),
+            ph: rnd(0, 6.28),
+            sp: rnd(0.6, 1.2),
+          });
+        for (let x = WIN.x - 30; x < WIN.x + WIN.w + 60; x += rnd(52, 88))
+          shops.push({
+            x,
+            w: rnd(34, 60),
+            on: R() < 0.58,
+            warm: R() < 0.82,
+            ph: rnd(0, 6.28),
+            tea: R() < 0.3,
+          });
+
+        /* three rain depths so the shower has volume */
+        const rain = [];
+        for (let i = 0; i < 340; i++) {
+          const d = R() < 0.4 ? 0 : R() < 0.6 ? 1 : 2;
+          rain.push({
+            x: rnd(WIN.x - 120, WIN.x + WIN.w + 120),
+            y: rnd(WIN.y - 260, WIN.y + WIN.h),
+            len: [7, 13, 22][d],
+            sp: [230, 430, 690][d],
+            a: [0.05, 0.1, 0.18][d],
+            wgt: [0.5, 0.75, 1][d],
+          });
+        }
+        /* water on the pane */
+        const drops = [];
+        for (let i = 0; i < 150; i++)
+          drops.push({
+            x: rnd(WIN.x + 8, WIN.x + WIN.w - 8),
+            y: rnd(WIN.y + 8, WIN.y + WIN.h - 8),
+            r: rnd(0.9, 3.8),
+            v: 0,
+            t: rnd(0, 16),
+            trail: 0,
+            hold: rnd(2, 20),
+          });
+
+        const grain = mk(180, 180);
+        (function () {
+          const g = grain.getContext('2d'),
+            d = g.createImageData(180, 180);
+          for (let i = 0; i < d.data.length; i += 4) {
+            const v = 190 + Math.random() * 60;
+            d.data[i] = d.data[i + 1] = d.data[i + 2] = v;
+            d.data[i + 3] = Math.random() * 58;
+          }
+          g.putImageData(d, 0, 0);
+        })();
+        let grainPat = null;
+
+        const windAt = t =>
+          0.5 + 0.32 * Math.sin(t * 0.27) + 0.18 * Math.sin(t * 0.71 + 1.1);
+
+        /* ============================================================
+   SCREEN CONTENT
+   ============================================================ */
+        const CODE = [
+          '// sync-worker — keep the night queue honest',
+          "import { queue } from '../core/queue.js'",
+          "import { retry } from '../utils/retry.js'",
+          '',
+          'const CONFIG = {',
+          "  region: 'ap-southeast-1',",
+          '  batch: 120,',
+          '  timeout: 15000,',
+          '}',
+          '',
+          'async function drain(stream) {',
+          '  const pending = await queue.take(CONFIG.batch)',
+          '  if (!pending.length) return { ok: true, moved: 0 }',
+          '',
+          '  const results = await Promise.allSettled(',
+          '    pending.map((job) => handle(job, stream))',
+          '  )',
+          '',
+          "  const failed = results.filter((r) => r.status === 'rejected')",
+          '  if (failed.length) {',
+          "    log.warn('requeue', failed.length)",
+          '    await retry(failed, { backoff: 400 })',
+          '  }',
+          '  return { ok: true, moved: pending.length }',
+          '}',
+          '',
+          'function handle(job, stream) {',
+          '  const start = performance.now()',
+          '  return stream.write(job.payload).then(() => {',
+          "    metrics.observe('job.ms', performance.now() - start)",
+          '    return job.ack()',
+          '  })',
+          '}',
+          '',
+          '// split the retry ladder per tenant tomorrow',
+          'export { drain, handle }',
+          '',
+          'const shipped = await drain(nightStream)',
+          "log.info('done', shipped.moved, 'records')",
+          '',
+        ];
+        const TOKC = {
+          kw: '#c792ea',
+          fn: '#82aaff',
+          str: '#c3e88d',
+          num: '#f78c6c',
+          com: '#4d6180',
+          pun: '#7f95b3',
+          id: '#aebdd4',
+        };
+        const KW =
+          /^(const|let|var|function|return|if|else|for|while|await|async|import|from|export|class|new|try|catch|of|in)$/;
+        const TOKRE =
+          /\/\/[^\n]*|'[^']*'|"[^"]*"|`[^`]*`|\d+(?:\.\d+)?|[A-Za-z_$][\w$]*|\s+|[^\s]/g;
+        const MW = new Map();
+        function measure(tok, fs) {
+          const k = fs + '|' + tok;
+          let v = MW.get(k);
+          if (v === undefined) {
+            v = ctx.measureText(tok).width;
+            MW.set(k, v);
+          }
+          return v;
+        }
+        function codeBlock(x, y, w, h, fs, off, alpha) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(x, y, w, h);
+          ctx.clip();
+          ctx.font =
+            fs + 'px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+          ctx.textBaseline = 'top';
+          ctx.globalAlpha = alpha;
+          const lh = fs * 1.62,
+            total = CODE.length * lh,
+            o = ((off % total) + total) % total;
+          const first = Math.floor(o / lh),
+            rows = Math.ceil(h / lh) + 1;
+          for (let i = 0; i < rows; i++) {
+            const line = CODE[(first + i) % CODE.length];
+            const yy = y + i * lh - (o - first * lh) + 2;
+            let cx = x + 7;
+            const m = line.match(TOKRE);
+            if (!m) continue;
+            for (const tk of m) {
+              if (/^\s+$/.test(tk)) {
+                cx += measure(tk, fs);
+                continue;
+              }
+              let col = TOKC.id;
+              if (tk.startsWith('//')) col = TOKC.com;
+              else if (/^['"`]/.test(tk)) col = TOKC.str;
+              else if (/^\d/.test(tk)) col = TOKC.num;
+              else if (KW.test(tk)) col = TOKC.kw;
+              else if (/^[A-Za-z_$]/.test(tk)) col = TOKC.fn;
+              else col = TOKC.pun;
+              ctx.fillStyle = col;
+              ctx.fillText(tk, cx, yy);
+              cx += measure(tk, fs);
+              if (cx > x + w) break;
+            }
+          }
+          ctx.restore();
+          ctx.globalAlpha = 1;
+        }
+
+        /* ============================================================
+   FAR LAYER
+   ============================================================ */
+        function sky() {
+          const g = ctx.createLinearGradient(0, WIN.y - 40, 0, WIN.y + WIN.h);
+          g.addColorStop(0, '#04070f');
+          g.addColorStop(0.3, '#0a1122');
+          g.addColorStop(0.62, '#16203a');
+          g.addColorStop(0.86, '#2b3150');
+          g.addColorStop(1, '#3b3a51');
+          ctx.fillStyle = g;
+          ctx.fillRect(WIN.x - 40, WIN.y - 40, WIN.w + 80, WIN.h + 60);
+          /* sodium haze rising off the city */
+          const h = ctx.createLinearGradient(0, 360, 0, 610);
+          h.addColorStop(0, 'rgba(180,120,90,0)');
+          h.addColorStop(1, 'rgba(212,138,86,.24)');
+          ctx.fillStyle = h;
+          ctx.fillRect(WIN.x - 40, 360, WIN.w + 80, 250);
+        }
+        function starsDraw(t) {
+          for (const s of stars) {
+            const a = s.a * (0.5 + 0.5 * Math.sin(t * s.tw + s.ph));
+            if (a <= 0) continue;
+            ctx.globalAlpha = a * 0.9;
+            ctx.fillStyle = '#e6ecff';
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, s.r, 0, 6.283);
+            ctx.fill();
+          }
+          ctx.globalAlpha = 1;
+        }
+        function moon(t) {
+          const mx = 1152,
+            my = 214,
+            r = 42;
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          glow(mx, my, 230, 'rgba(198,208,236,.45)', 0.34);
+          glow(mx, my, 80, 'rgba(238,242,255,.85)', 0.5);
+          ctx.restore();
+          ctx.fillStyle = '#edf0e7';
+          ctx.beginPath();
+          ctx.arc(mx, my, r, 0, 6.283);
+          ctx.fill();
+          ctx.fillStyle = 'rgba(176,182,172,.4)';
+          [
+            [-13, -9, 8],
+            [7, 6, 11],
+            [-6, 15, 6],
+            [15, -13, 5],
+            [2, -18, 4],
+          ].forEach(c => {
+            ctx.beginPath();
+            ctx.arc(mx + c[0], my + c[1], c[2], 0, 6.283);
+            ctx.fill();
+          });
+          /* cloud veil sliding across it */
+          ctx.globalAlpha = 0.11;
+          ctx.fillStyle = '#b4c2e0';
+          const vx = WIN.x + ((t * 11) % (WIN.w + 400)) - 200;
+          ctx.beginPath();
+          ctx.ellipse(vx, my + Math.sin(t * 0.14) * 7, 110, 10, 0, 0, 6.283);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.ellipse(vx + 130, my + 22, 80, 7, 0, 0, 6.283);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+        function cloudsDraw(t) {
+          for (const c of clouds) {
+            const x = ((c.x + t * c.sp) % (WIN.w + 1000)) - 500 + WIN.x;
+            ctx.globalAlpha = c.a;
+            ctx.fillStyle = '#8c9bbd';
+            ctx.beginPath();
+            ctx.ellipse(x, c.y, c.w / 2, c.h / 2, 0, 0, 6.283);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(
+              x + c.w * 0.24,
+              c.y + c.h * 0.18,
+              c.w / 3,
+              c.h / 2.6,
+              0,
+              0,
+              6.283
+            );
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(
+              x - c.w * 0.26,
+              c.y + c.h * 0.1,
+              c.w / 3.4,
+              c.h / 3,
+              0,
+              0,
+              6.283
+            );
+            ctx.fill();
+          }
+          ctx.globalAlpha = 1;
+        }
+        const gq = [];
+        function buildings(arr, t, depth) {
+          for (const b of arr) {
+            ctx.fillStyle = b.tint;
+            ctx.fillRect(b.x, b.y, b.w, b.h);
+            /* floor slabs */
+            ctx.fillStyle =
+              'rgba(150,172,212,' + (depth < 1 ? 0.03 : 0.045) + ')';
+            for (let y = b.y + 9; y < b.y + b.h; y += 24)
+              ctx.fillRect(b.x, y, b.w, 1);
+            ctx.fillStyle = 'rgba(255,255,255,.028)';
+            ctx.fillRect(b.x, b.y, 2, b.h);
+            ctx.fillStyle = 'rgba(0,0,0,.22)';
+            ctx.fillRect(b.x + b.w - 3, b.y, 3, b.h);
+            /* parapet + roof clutter */
+            ctx.fillStyle = 'rgba(0,0,0,.35)';
+            ctx.fillRect(b.x - 2, b.y - 3, b.w + 4, 4);
+            if (b.tank) {
+              ctx.fillStyle = '#060a12';
+              ctx.fillRect(b.x + b.w * 0.52, b.y - 11, 18, 9);
+              ctx.fillRect(b.x + b.w * 0.55, b.y - 15, 3, 5);
+              ctx.fillRect(b.x + b.w * 0.66, b.y - 15, 3, 5);
+            }
+            if (b.ac) {
+              ctx.fillStyle = '#070b14';
+              ctx.fillRect(b.x + b.w * 0.18, b.y - 7, 13, 6);
+            }
+            if (b.antenna) {
+              ctx.strokeStyle = '#060a12';
+              ctx.lineWidth = 1.6;
+              ctx.beginPath();
+              ctx.moveTo(b.x + b.w * 0.3, b.y);
+              ctx.lineTo(b.x + b.w * 0.3, b.y - 26);
+              ctx.stroke();
+              if (Math.sin(t * 1.7 + b.x) > 0.8) {
+                ctx.fillStyle = 'rgba(255,86,72,.95)';
+                ctx.beginPath();
+                ctx.arc(b.x + b.w * 0.3, b.y - 27, 1.8, 0, 6.283);
+                ctx.fill();
+              }
+            }
+            if (depth < 0) continue; /* distant skyline stays as silhouette */
+            for (const w of b.wins) {
+              if (!w.lit || (w.blink && Math.sin(t * w.tf * 2 + w.tp) < -0.5)) {
+                ctx.fillStyle = 'rgba(116,142,190,.05)';
+                ctx.fillRect(w.x, w.y, w.w, w.h);
+                continue;
+              }
+              const a =
+                w.br *
+                (0.87 + 0.13 * Math.sin(t * w.tf * 8 + w.tp)) *
+                (depth === 0 ? 0.5 : 0.82);
+              ctx.fillStyle = w.warm
+                ? 'rgba(255,192,120,' + a + ')'
+                : 'rgba(182,212,255,' + a * 0.82 + ')';
+              ctx.fillRect(w.x, w.y, w.w, w.h);
+              /* half-drawn curtains break the grid up */
+              if (w.curtain) {
+                ctx.fillStyle = 'rgba(12,16,26,.45)';
+                ctx.fillRect(w.x, w.y, w.w, w.h * 0.42);
+              }
+              gq.push([
+                w.warm ? S_WARM : S_COOL,
+                w.x + w.w / 2,
+                w.y + w.h / 2,
+                13,
+                0.23 * a,
+              ]);
+            }
+          }
+          if (gq.length) {
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            for (const q of gq) sglow(q[0], q[1], q[2], q[3], q[4]);
+            ctx.restore();
+            gq.length = 0;
+          }
+          /* aerial perspective — rain thins everything with distance */
+          if (depth < 1) {
+            ctx.globalAlpha = depth < 0 ? 0.42 : 0.2;
+            const g = ctx.createLinearGradient(0, WIN.y, 0, ROADY);
+            g.addColorStop(0, 'rgba(48,60,92,.5)');
+            g.addColorStop(1, 'rgba(74,74,96,.85)');
+            ctx.fillStyle = g;
+            ctx.fillRect(
+              WIN.x - 40,
+              WIN.y - 40,
+              WIN.w + 80,
+              ROADY - WIN.y + 40
+            );
+            ctx.globalAlpha = 1;
+          }
+        }
+        function street(t) {
+          const g = ctx.createLinearGradient(0, ROADY, 0, ROADB);
+          g.addColorStop(0, '#151b29');
+          g.addColorStop(1, '#090d16');
+          ctx.fillStyle = g;
+          ctx.fillRect(WIN.x - 40, ROADY, WIN.w + 80, ROADB - ROADY);
+          ctx.globalAlpha = 0.17;
+          ctx.fillStyle = '#4b6089';
+          ctx.fillRect(WIN.x - 40, ROADY + 3, WIN.w + 80, ROADB - ROADY - 7);
+          ctx.globalAlpha = 1;
+          ctx.globalAlpha = 0.18;
+          ctx.fillStyle = '#ccd6e6';
+          for (let x = WIN.x - 40; x < WIN.x + WIN.w + 40; x += 32)
+            ctx.fillRect(x, ROADY + 22, 14, 1.4);
+          ctx.globalAlpha = 1;
+          /* kerb */
+          ctx.fillStyle = 'rgba(150,168,200,.10)';
+          ctx.fillRect(WIN.x - 40, ROADY + 1, WIN.w + 80, 1.6);
+          ctx.fillRect(WIN.x - 40, ROADB - 4, WIN.w + 80, 1.4);
+
+          /* shutters, tea stalls, bulbs */
+          for (const s of shops) {
+            ctx.fillStyle = '#070b14';
+            ctx.fillRect(s.x, ROADY - 27, s.w, 27);
+            ctx.fillStyle = 'rgba(120,140,180,.07)';
+            for (let i = 0; i < 5; i++)
+              ctx.fillRect(s.x + 1, ROADY - 24 + i * 5, s.w - 2, 1);
+            ctx.fillStyle = '#120f18';
+            ctx.fillRect(s.x - 3, ROADY - 30, s.w + 6, 5);
+            if (!s.on) continue;
+            const f = 0.86 + 0.14 * Math.sin(t * 2.6 + s.ph);
+            const warm = s.warm;
+            ctx.fillStyle =
+              (warm ? 'rgba(255,182,104,' : 'rgba(188,218,255,') +
+              0.46 * f +
+              ')';
+            ctx.fillRect(s.x + 4, ROADY - 21, s.w - 8, 7);
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            sglow(
+              warm ? S_WARM : S_COOL,
+              s.x + s.w / 2,
+              ROADY - 16,
+              34,
+              0.3 * f
+            );
+            ctx.restore();
+            /* the single bulb over a tea stall */
+            if (s.tea) {
+              ctx.strokeStyle = 'rgba(120,140,175,.4)';
+              ctx.lineWidth = 0.8;
+              ctx.beginPath();
+              ctx.moveTo(s.x + s.w * 0.5, ROADY - 30);
+              ctx.lineTo(s.x + s.w * 0.5, ROADY - 36);
+              ctx.stroke();
+              ctx.fillStyle = 'rgba(255,216,152,' + 0.9 * f + ')';
+              ctx.beginPath();
+              ctx.arc(s.x + s.w * 0.5, ROADY - 29, 1.8, 0, 6.283);
+              ctx.fill();
+              ctx.save();
+              ctx.globalCompositeOperation = 'lighter';
+              sglow(S_WARM, s.x + s.w * 0.5, ROADY - 29, 22, 0.4 * f);
+              ctx.restore();
+            }
+            ctx.save();
+            ctx.globalAlpha = 0.15 * f;
+            const rg = ctx.createLinearGradient(0, ROADY, 0, ROADB - 5);
+            rg.addColorStop(
+              0,
+              warm ? 'rgba(255,176,96,.9)' : 'rgba(170,210,255,.9)'
+            );
+            rg.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = rg;
+            ctx.fillRect(
+              s.x + s.w * 0.5 - 5 + Math.sin(t * 2 + s.ph) * 1.5,
+              ROADY,
+              10,
+              ROADB - ROADY - 5
+            );
+            ctx.restore();
+          }
+          /* wet roadside trees */
+          for (const tr of trees) {
+            const sw = Math.sin(t * tr.sp + tr.ph) * 2.4 * windAt(t);
+            ctx.strokeStyle = '#060910';
+            ctx.lineWidth = 2.2;
+            ctx.beginPath();
+            ctx.moveTo(tr.x, tr.y);
+            ctx.lineTo(tr.x + sw * 0.4, tr.y - tr.r * 0.9);
+            ctx.stroke();
+            ctx.fillStyle = '#09111a';
+            ctx.beginPath();
+            ctx.ellipse(
+              tr.x + sw,
+              tr.y - tr.r * 1.22,
+              tr.r,
+              tr.r * 0.8,
+              0,
+              0,
+              6.283
+            );
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(
+              tr.x + sw - tr.r * 0.55,
+              tr.y - tr.r * 0.92,
+              tr.r * 0.58,
+              tr.r * 0.48,
+              0,
+              0,
+              6.283
+            );
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(
+              tr.x + sw + tr.r * 0.5,
+              tr.y - tr.r * 1.5,
+              tr.r * 0.5,
+              tr.r * 0.42,
+              0,
+              0,
+              6.283
+            );
+            ctx.fill();
+            /* lamp light sitting in the wet leaves */
+            ctx.fillStyle = 'rgba(206,226,190,.34)';
+            for (let i = 0; i < 9; i++) {
+              const a = (i / 9) * 6.283 + tr.ph,
+                d = tr.r * (0.3 + 0.55 * (((i * 37) % 10) / 10));
+              ctx.beginPath();
+              ctx.arc(
+                tr.x + sw + Math.cos(a) * d,
+                tr.y - tr.r * 1.22 + Math.sin(a) * d * 0.78,
+                0.85,
+                0,
+                6.283
+              );
+              ctx.fill();
+            }
+          }
+          /* lamp posts */
+          for (const l of lamps) {
+            ctx.strokeStyle = '#080c14';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(l.x, l.y);
+            ctx.lineTo(l.x, l.y - l.h);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(l.x, l.y - l.h);
+            ctx.quadraticCurveTo(
+              l.x + 4,
+              l.y - l.h - 5,
+              l.x + 9,
+              l.y - l.h - 4
+            );
+            ctx.stroke();
+            const f = 0.92 + 0.08 * Math.sin(t * 1.2 + l.ph);
+            ctx.fillStyle = 'rgba(255,196,124,' + 0.92 * f + ')';
+            ctx.beginPath();
+            ctx.ellipse(l.x + 9, l.y - l.h - 3, 3.4, 2.1, 0, 0, 6.283);
+            ctx.fill();
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            sglow(S_SODIUM, l.x + 9, l.y - l.h - 3, 52, 0.34 * f);
+            ctx.restore();
+            ctx.save();
+            ctx.globalAlpha = 0.055 * f;
+            poly([
+              [l.x + 9, l.y - l.h - 3],
+              [l.x + 34, l.y + 6],
+              [l.x - 18, l.y + 6],
+            ]);
+            ctx.fillStyle = 'rgba(255,198,136,1)';
+            ctx.fill();
+            ctx.restore();
+            ctx.save();
+            ctx.globalAlpha = 0.17 * f;
+            const rg = ctx.createLinearGradient(0, l.y, 0, ROADB - 3);
+            rg.addColorStop(0, 'rgba(255,190,116,.9)');
+            rg.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = rg;
+            ctx.fillRect(
+              l.x + 7 + Math.sin(t * 1.6 + l.ph) * 1.4,
+              l.y,
+              6,
+              ROADB - l.y - 3
+            );
+            ctx.restore();
+          }
+        }
+        function rainFall(t, dt) {
+          const wnd = windAt(t);
+          ctx.lineCap = 'round';
+          for (const d of rain) {
+            d.y += d.sp * dt;
+            d.x += (wnd * 34 * d.wgt * dt * 60) / 60;
+            if (d.y > WIN.y + WIN.h + 20) {
+              d.y = WIN.y - rnd(30, 300);
+              d.x = rnd(WIN.x - 120, WIN.x + WIN.w + 120);
+            }
+            if (d.x > WIN.x + WIN.w + 120) d.x = WIN.x - 120;
+            ctx.strokeStyle = 'rgba(198,218,255,' + d.a + ')';
+            ctx.lineWidth = d.wgt * 0.9;
+            ctx.beginPath();
+            ctx.moveTo(d.x, d.y);
+            ctx.lineTo(d.x - d.len * wnd * 0.32, d.y - d.len);
+            ctx.stroke();
+          }
+        }
+
+        /* ============================================================
+   MID LAYER — the room
+   ============================================================ */
+        function room() {
+          /* walls */
+          ctx.fillStyle = '#0c0f16';
+          ctx.fillRect(WALL.x1, WALL.y1, WALL.x2 - WALL.x1, WALL.y2 - WALL.y1);
+          qfill(LWALL, '#090c13');
+          qfill(RWALL, '#070a10');
+          qfill(CEIL, '#05070d');
+          poly(FLOOR);
+          const fg = ctx.createLinearGradient(0, 778, 0, 912);
+          fg.addColorStop(0, '#131827');
+          fg.addColorStop(1, '#070911');
+          ctx.fillStyle = fg;
+          ctx.fill();
+          /* floor boards */
+          ctx.save();
+          poly(FLOOR);
+          ctx.clip();
+          ctx.strokeStyle = 'rgba(140,168,215,.05)';
+          ctx.lineWidth = 1;
+          for (let i = 0; i <= 14; i++) {
+            const a = qp(FLOOR, i / 14, 0),
+              b = qp(FLOOR, i / 14, 1);
+            ctx.beginPath();
+            ctx.moveTo(a[0], a[1]);
+            ctx.lineTo(b[0], b[1]);
+            ctx.stroke();
+          }
+          ctx.restore();
+          /* ambient occlusion in the corners */
+          ctx.save();
+          let g = ctx.createLinearGradient(0, 778, 0, 700);
+          g.addColorStop(0, 'rgba(0,0,0,.55)');
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = g;
+          ctx.fillRect(WALL.x1, 690, WALL.x2 - WALL.x1, 90);
+          g = ctx.createLinearGradient(188, 0, 300, 0);
+          g.addColorStop(0, 'rgba(0,0,0,.5)');
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = g;
+          ctx.fillRect(188, 52, 120, 726);
+          g = ctx.createLinearGradient(1412, 0, 1300, 0);
+          g.addColorStop(0, 'rgba(0,0,0,.5)');
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = g;
+          ctx.fillRect(1292, 52, 120, 726);
+          g = ctx.createLinearGradient(0, 52, 0, 150);
+          g.addColorStop(0, 'rgba(0,0,0,.6)');
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = g;
+          ctx.fillRect(0, 40, W, 120);
+          ctx.restore();
+          /* skirting */
+          ctx.fillStyle = '#10141d';
+          ctx.fillRect(WALL.x1, 764, WALL.x2 - WALL.x1, 14);
+          ctx.fillStyle = 'rgba(150,180,225,.08)';
+          ctx.fillRect(WALL.x1, 764, WALL.x2 - WALL.x1, 1.4);
+        }
+
+        function windowFrame(t) {
+          const jamb = '#0a0d14';
+          /* reveal: the wall has thickness, so the opening is a shallow box */
+          const o = 16;
+          ctx.fillStyle = '#11151e';
+          poly([
+            [WIN.x - o, WIN.y - o],
+            [WIN.x + WIN.w + o, WIN.y - o],
+            [WIN.x + WIN.w, WIN.y],
+            [WIN.x, WIN.y],
+          ]);
+          ctx.fill();
+          ctx.fillStyle = '#0b0e15';
+          poly([
+            [WIN.x - o, WIN.y - o],
+            [WIN.x, WIN.y],
+            [WIN.x, WIN.y + WIN.h],
+            [WIN.x - o, WIN.y + WIN.h + o],
+          ]);
+          ctx.fill();
+          ctx.fillStyle = '#090c12';
+          poly([
+            [WIN.x + WIN.w + o, WIN.y - o],
+            [WIN.x + WIN.w + o, WIN.y + WIN.h + o],
+            [WIN.x + WIN.w, WIN.y + WIN.h],
+            [WIN.x + WIN.w, WIN.y],
+          ]);
+          ctx.fill();
+
+          /* mullions */
+          const bays = 4,
+            bw = WIN.w / bays,
+            midY = WIN.y + WIN.h * 0.56;
+          ctx.fillStyle = jamb;
+          for (let i = 1; i < bays; i++) {
+            ctx.fillRect(WIN.x + i * bw - 7, WIN.y, 14, WIN.h);
+            ctx.fillStyle = 'rgba(158,186,228,.20)';
+            ctx.fillRect(WIN.x + i * bw - 7, WIN.y, 1.6, WIN.h);
+            ctx.fillStyle = 'rgba(0,0,0,.4)';
+            ctx.fillRect(WIN.x + i * bw + 5, WIN.y, 2, WIN.h);
+            ctx.fillStyle = jamb;
+          }
+          ctx.fillRect(WIN.x, midY - 6, WIN.w, 12);
+          ctx.fillStyle = 'rgba(158,186,228,.18)';
+          ctx.fillRect(WIN.x, midY - 6, WIN.w, 1.5);
+          ctx.fillStyle = 'rgba(0,0,0,.4)';
+          ctx.fillRect(WIN.x, midY + 4, WIN.w, 2);
+          /* frame edge highlights */
+          ctx.fillStyle = 'rgba(158,186,228,.16)';
+          ctx.fillRect(WIN.x, WIN.y - 1.5, WIN.w, 1.5);
+          ctx.fillRect(WIN.x - 1.5, WIN.y, 1.5, WIN.h);
+          ctx.fillRect(WIN.x + WIN.w, WIN.y, 1.5, WIN.h);
+
+          /* --- second bay, upper pane, hinged open --- */
+          const px = WIN.x + bw + 7,
+            pw = bw - 14,
+            py = WIN.y + 3,
+            ph = midY - WIN.y - 9;
+          const swing = 30 + Math.sin(t * 0.42) * 4;
+          ctx.save();
+          ctx.globalAlpha = 0.3;
+          ctx.fillStyle = '#03060d';
+          ctx.fillRect(px, py, pw, ph);
+          ctx.restore();
+          /* the draught coming in */
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(px, py, pw, ph + 46);
+          ctx.clip();
+          ctx.globalAlpha = 0.45;
+          for (let i = 0; i < 24; i++) {
+            const yy = ((t * 260 + i * 67) % (ph + 70)) + py - 22,
+              xx = px + ((i * 57 + t * 52) % pw);
+            ctx.strokeStyle = 'rgba(206,226,255,.38)';
+            ctx.lineWidth = 0.9;
+            ctx.beginPath();
+            ctx.moveTo(xx, yy);
+            ctx.lineTo(xx - 6, yy - 13);
+            ctx.stroke();
+          }
+          ctx.restore();
+          const pane = [
+            [px, py],
+            [px + pw, py - 7],
+            [px + pw - swing * 0.14, py + ph + 5],
+            [px + swing, py + ph],
+          ];
+          ctx.save();
+          ctx.globalAlpha = 0.26;
+          qfill(pane, '#7ea2d4');
+          ctx.restore();
+          poly(pane);
+          ctx.strokeStyle = '#111722';
+          ctx.lineWidth = 8;
+          ctx.stroke();
+          ctx.strokeStyle = 'rgba(176,202,242,.38)';
+          ctx.lineWidth = 1.3;
+          ctx.stroke();
+          ctx.fillStyle = '#1a212d';
+          ctx.fillRect(px + swing - 3, py + ph * 0.5, 13, 5);
+
+          /* sill */
+          ctx.fillStyle = '#0f131c';
+          poly([
+            [WIN.x - 30, WIN.y + WIN.h + o],
+            [WIN.x + WIN.w + 30, WIN.y + WIN.h + o],
+            [WIN.x + WIN.w + 50, WIN.y + WIN.h + o + 22],
+            [WIN.x - 50, WIN.y + WIN.h + o + 22],
+          ]);
+          ctx.fill();
+          ctx.fillStyle = 'rgba(152,182,228,.14)';
+          ctx.fillRect(WIN.x - 30, WIN.y + WIN.h + o, WIN.w + 60, 2);
+          /* a puddle of blown-in rain on the sill under the open pane */
+          ctx.globalAlpha = 0.2;
+          ctx.fillStyle = '#93b6e0';
+          ctx.beginPath();
+          ctx.ellipse(
+            px + pw * 0.5,
+            WIN.y + WIN.h + o + 10,
+            pw * 0.42,
+            5,
+            0,
+            0,
+            6.283
+          );
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+        function glass(t, dt) {
+          /* pane tint + the room faintly mirrored back */
+          ctx.globalAlpha = 0.09;
+          const g = ctx.createLinearGradient(
+            WIN.x,
+            WIN.y,
+            WIN.x + WIN.w,
+            WIN.y + WIN.h
+          );
+          g.addColorStop(0, '#7e9ac9');
+          g.addColorStop(0.5, 'rgba(120,150,200,0)');
+          g.addColorStop(1, '#6b85b4');
+          ctx.fillStyle = g;
+          ctx.fillRect(WIN.x, WIN.y, WIN.w, WIN.h);
+          ctx.globalAlpha = 1;
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.globalAlpha = 0.055;
+          ctx.fillStyle = '#8ad2ff';
+          ctx.fillRect(600, 430, 404, 190);
+          ctx.globalAlpha = 0.04;
+          ctx.fillStyle = '#bfe6ff';
+          ctx.fillRect(352, 494, 244, 140);
+          ctx.restore();
+
+          /* water sheeting down the outside */
+          ctx.save();
+          ctx.globalAlpha = 0.1;
+          ctx.strokeStyle = '#bcd6ff';
+          ctx.lineWidth = 1.3;
+          for (let i = 0; i < 16; i++) {
+            const x = WIN.x + 18 + ((i * 137) % (WIN.w - 36));
+            const o = ((t * 40 + i * 90) % (WIN.h + 120)) - 60;
+            ctx.beginPath();
+            ctx.moveTo(x, WIN.y + o);
+            ctx.quadraticCurveTo(
+              x + Math.sin(i) * 5,
+              WIN.y + o + 40,
+              x + Math.sin(i * 2) * 3,
+              WIN.y + o + 82
+            );
+            ctx.stroke();
+          }
+          ctx.restore();
+
+          for (const d of drops) {
+            d.t += dt;
+            if (d.v > 0) {
+              d.y += d.v * dt * 60;
+              d.v *= 0.994;
+              d.trail = Math.min(78, d.trail + d.v * dt * 60);
+              if (d.y > WIN.y + WIN.h - 8) {
+                d.y = WIN.y + rnd(4, 44);
+                d.x = rnd(WIN.x + 8, WIN.x + WIN.w - 8);
+                d.v = 0;
+                d.trail = 0;
+                d.t = 0;
+                d.hold = rnd(3, 20);
+              }
+            } else if (d.t > d.hold && d.r > 2) {
+              d.v = rnd(0.5, 2.1);
+            }
+            if (d.trail > 1) {
+              ctx.globalAlpha = 0.09;
+              ctx.fillStyle = '#d6e6ff';
+              ctx.fillRect(d.x - d.r * 0.3, d.y - d.trail, d.r * 0.6, d.trail);
+              ctx.globalAlpha = 1;
+            }
+            ctx.globalAlpha = 0.28;
+            ctx.fillStyle = '#cee1ff';
+            ctx.beginPath();
+            ctx.arc(d.x, d.y, d.r, 0, 6.283);
+            ctx.fill();
+            ctx.globalAlpha = 0.5;
+            ctx.fillStyle = 'rgba(255,255,255,.75)';
+            ctx.beginPath();
+            ctx.arc(d.x - d.r * 0.3, d.y - d.r * 0.35, d.r * 0.28, 0, 6.283);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+          }
+          ctx.globalAlpha = 0.06;
+          ctx.fillStyle = '#b6cde8';
+          ctx.fillRect(WIN.x, WIN.y, WIN.w, 30);
+          ctx.fillRect(WIN.x, WIN.y + WIN.h - 36, WIN.w, 36);
+          ctx.globalAlpha = 1;
+        }
+
+        function boards() {
+          const b1 = [
+            qp(LWALL, 0.1, 0.24),
+            qp(LWALL, 0.97, 0.275),
+            qp(LWALL, 0.97, 0.545),
+            qp(LWALL, 0.1, 0.565),
+          ];
+          qfill(b1, '#141924');
+          poly(b1);
+          ctx.strokeStyle = '#212a39';
+          ctx.lineWidth = 4;
+          ctx.stroke();
+          ctx.globalAlpha = 0.35;
+          qfill(qsub(b1, 0, 0, 1, 0.06), '#000');
+          ctx.globalAlpha = 1;
+          const notes = [
+            [0.07, 0.1, 0.2, 0.26, '#d6c477'],
+            [0.35, 0.08, 0.2, 0.24, '#8cbd97'],
+            [0.65, 0.12, 0.22, 0.26, '#d69877'],
+            [0.09, 0.5, 0.22, 0.26, '#8cb1d6'],
+            [0.41, 0.54, 0.2, 0.24, '#c597ce'],
+            [0.69, 0.48, 0.2, 0.26, '#d6c477'],
+          ];
+          for (const n of notes) {
+            const q = qsub(b1, n[0], n[1], n[0] + n[2], n[1] + n[3]);
+            ctx.globalAlpha = 0.58;
+            qfill(q, n[4]);
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = 'rgba(18,22,30,.45)';
+            ctx.lineWidth = 1.1;
+            for (let i = 1; i <= 2; i++) {
+              const a = qp(q, 0.14, 0.3 * i + 0.12),
+                c = qp(q, 0.8, 0.3 * i + 0.12);
+              ctx.beginPath();
+              ctx.moveTo(a[0], a[1]);
+              ctx.lineTo(c[0], c[1]);
+              ctx.stroke();
+            }
+            ctx.globalAlpha = 0.4;
+            qfill(qsub(q, 0.42, -0.06, 0.58, 0.06), '#c9d3e2');
+            ctx.globalAlpha = 1;
+          }
+          ctx.strokeStyle = 'rgba(198,108,98,.34)';
+          ctx.lineWidth = 1.2;
+          [
+            [0.17, 0.23, 0.45, 0.2],
+            [0.45, 0.2, 0.75, 0.25],
+            [0.19, 0.63, 0.51, 0.66],
+            [0.51, 0.66, 0.79, 0.61],
+          ].forEach(l => {
+            const a = qp(b1, l[0], l[1]),
+              c = qp(b1, l[2], l[3]);
+            ctx.beginPath();
+            ctx.moveTo(a[0], a[1]);
+            ctx.lineTo(c[0], c[1]);
+            ctx.stroke();
+          });
+
+          const b2 = [
+            qp(LWALL, 0.18, 0.605),
+            qp(LWALL, 0.95, 0.635),
+            qp(LWALL, 0.95, 0.755),
+            qp(LWALL, 0.18, 0.75),
+          ];
+          qfill(b2, '#10141c');
+          poly(b2);
+          ctx.strokeStyle = '#1d2531';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+          ctx.strokeStyle = 'rgba(178,204,240,.26)';
+          ctx.lineWidth = 1;
+          for (let i = 0; i < 4; i++) {
+            const a = qp(b2, 0.13, 0.18 + i * 0.21),
+              c = qp(b2, 0.55 + (i % 2) * 0.28, 0.18 + i * 0.21);
+            ctx.beginPath();
+            ctx.moveTo(a[0], a[1]);
+            ctx.lineTo(c[0], c[1]);
+            ctx.stroke();
+            const bx = qp(b2, 0.06, 0.13 + i * 0.21);
+            ctx.strokeRect(bx[0] - 1, bx[1] - 1, 7, 7);
+            if (i < 2) {
+              ctx.beginPath();
+              ctx.moveTo(bx[0] - 1, bx[1] + 2);
+              ctx.lineTo(bx[0] + 2, bx[1] + 6);
+              ctx.lineTo(bx[0] + 7, bx[1] - 2);
+              ctx.stroke();
+            }
+          }
+          ctx.globalAlpha = 0.42;
+          qfill(qsub(LWALL, 0.55, 0.09, 0.93, 0.2), '#c6d0df');
+          ctx.globalAlpha = 1;
+        }
+        function clothes(t) {
+          const wnd = windAt(t);
+          const a = qp(RWALL, 0.05, 0.175),
+            b = qp(RWALL, 0.6, 0.14);
+          ctx.strokeStyle = '#1a2230';
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.moveTo(a[0], a[1]);
+          ctx.lineTo(b[0], b[1]);
+          ctx.stroke();
+          const hangs = [
+            { u: 0.12, col: '#294559', w: 60, h: 156, ph: 0.2 },
+            { u: 0.29, col: '#363b4e', w: 70, h: 180, ph: 1.5 },
+            { u: 0.48, col: '#453730', w: 54, h: 136, ph: 2.8 },
+          ];
+          for (const g of hangs) {
+            const top = qp(RWALL, g.u, 0.16);
+            const sway =
+              Math.sin(t * 1.05 + g.ph) * 11 * wnd +
+              Math.sin(t * 2.2 + g.ph) * 3.4 * wnd;
+            const x = top[0],
+              y = top[1],
+              bx = x + sway;
+            ctx.strokeStyle = '#28313e';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x, y - 9);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x - g.w * 0.34, y + 6);
+            ctx.lineTo(x, y);
+            ctx.lineTo(x + g.w * 0.34, y + 6);
+            ctx.stroke();
+            poly([
+              [x - g.w * 0.4, y + 6],
+              [x + g.w * 0.4, y + 6],
+              [x + g.w * 0.46 + sway * 0.34, y + g.h * 0.45],
+              [bx + g.w * 0.4, y + g.h],
+              [bx - g.w * 0.4, y + g.h],
+              [x - g.w * 0.46 + sway * 0.34, y + g.h * 0.45],
+            ]);
+            ctx.fillStyle = g.col;
+            ctx.globalAlpha = 0.92;
+            ctx.fill();
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = 'rgba(0,0,0,.32)';
+            ctx.lineWidth = 2.2;
+            ctx.beginPath();
+            ctx.moveTo(x + g.w * 0.05, y + 13);
+            ctx.quadraticCurveTo(
+              x + g.w * 0.1 + sway * 0.5,
+              y + g.h * 0.55,
+              bx + g.w * 0.06,
+              y + g.h - 6
+            );
+            ctx.stroke();
+            ctx.strokeStyle = 'rgba(148,184,236,.15)';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.moveTo(x - g.w * 0.4, y + 8);
+            ctx.quadraticCurveTo(
+              x - g.w * 0.5 + sway * 0.4,
+              y + g.h * 0.5,
+              bx - g.w * 0.38,
+              y + g.h - 4
+            );
+            ctx.stroke();
+          }
+        }
+        function shelf() {
+          const q = [
+            [1428, 470],
+            [1600, 424],
+            [1600, 842],
+            [1428, 790],
+          ];
+          qfill(q, '#10141b');
+          poly(q);
+          ctx.strokeStyle = '#1a212d';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+          const pal = [
+            '#89584a',
+            '#3d5b76',
+            '#5a6844',
+            '#78546e',
+            '#485868',
+            '#87713f',
+            '#57486c',
+            '#75463e',
+            '#3d6961',
+            '#69693e',
+            '#6a4a3a',
+          ];
+          for (let r = 0; r < 4; r++) {
+            const v0 = 0.055 + r * 0.235,
+              v1 = v0 + 0.185;
+            qfill(qsub(q, 0.04, v1, 0.96, v1 + 0.026), '#1a2130');
+            let u = 0.07,
+              k = r * 7;
+            while (u < 0.93) {
+              const bw = 0.03 + ((k * 13) % 7) / 230;
+              const lean = (k * 29) % 11 === 0;
+              const hv = v0 + ((k * 17) % 5) / 100;
+              let bq = [
+                qp(q, u, hv),
+                qp(q, u + bw, hv - 0.004),
+                qp(q, u + bw, v1),
+                qp(q, u, v1),
+              ];
+              if (lean) {
+                bq[0] = qp(q, u + bw * 0.5, hv + 0.022);
+                bq[1] = qp(q, u + bw * 1.4, hv + 0.006);
+              }
+              qfill(bq, pal[(k * 3) % pal.length]);
+              ctx.globalAlpha = 0.5;
+              qfill(qsub(bq, 0.18, 0.13, 0.82, 0.18), 'rgba(238,232,216,.85)');
+              ctx.globalAlpha = 0.34;
+              qfill(qsub(bq, 0.24, 0.72, 0.76, 0.765), 'rgba(238,232,216,.7)');
+              ctx.globalAlpha = 0.4;
+              qfill(qsub(bq, 0.9, 0.02, 1, 1), '#04060b');
+              ctx.globalAlpha = 1;
+              u += bw + 0.004;
+              k++;
+            }
+            if (r === 0)
+              for (let i = 0; i < 3; i++)
+                qfill(
+                  qsub(q, 0.58, 0.052 + i * 0.016, 0.92, 0.066 + i * 0.016),
+                  pal[(i * 4 + 1) % pal.length]
+                );
+          }
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.globalAlpha = 0.06;
+          const g = ctx.createLinearGradient(1428, 0, 1600, 0);
+          g.addColorStop(0, 'rgba(138,178,234,.9)');
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          poly(q);
+          ctx.fillStyle = g;
+          ctx.fill();
+          ctx.restore();
+        }
+        function bed() {
+          const top = [
+            [4, 736],
+            [250, 720],
+            [306, 802],
+            [30, 830],
+          ];
+          qfill(
+            [
+              [30, 830],
+              [306, 802],
+              [306, 846],
+              [30, 876],
+            ],
+            '#0c1019'
+          );
+          qfill(
+            [
+              [250, 720],
+              [306, 802],
+              [306, 846],
+              [258, 766],
+            ],
+            '#0e131d'
+          );
+          qfill(top, '#19202f');
+          qfill(qsub(top, 0, 0.4, 1, 1), '#212e44');
+          qfill(qsub(top, 0, 0.4, 1, 0.5), '#2a3950');
+          const pw = qsub(top, 0.05, 0.05, 0.42, 0.36);
+          poly(pw);
+          ctx.fillStyle = '#2d3849';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(158,188,230,.13)';
+          ctx.lineWidth = 1.3;
+          ctx.stroke();
+          poly([
+            [0, 650],
+            [38, 646],
+            [44, 738],
+            [4, 744],
+          ]);
+          ctx.fillStyle = '#131822';
+          ctx.fill();
+          /* creases */
+          ctx.strokeStyle = 'rgba(0,0,0,.25)';
+          ctx.lineWidth = 1.4;
+          for (let i = 1; i < 4; i++) {
+            const a = qp(top, i / 4, 0.42),
+              b = qp(top, i / 4 - 0.04, 1);
+            ctx.beginPath();
+            ctx.moveTo(a[0], a[1]);
+            ctx.lineTo(b[0], b[1]);
+            ctx.stroke();
+          }
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.globalAlpha = 0.07;
+          const g = ctx.createLinearGradient(300, 752, 20, 800);
+          g.addColorStop(0, 'rgba(148,184,234,.9)');
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          poly(top);
+          ctx.fillStyle = g;
+          ctx.fill();
+          ctx.restore();
+        }
+
+        /* the table fan, set behind the workstation on a low crate near the glass */
+        function fan(t) {
+          const cx = 1372,
+            cy = 590,
+            r = 64;
+          /* crate it stands on */
+          const crate = [
+            [1300, 706],
+            [1450, 694],
+            [1450, 850],
+            [1300, 866],
+          ];
+          qfill(crate, '#141926');
+          qfill(
+            [
+              [1300, 706],
+              [1450, 694],
+              [1442, 704],
+              [1308, 716],
+            ],
+            '#1d2434'
+          );
+          ctx.strokeStyle = 'rgba(140,170,215,.08)';
+          ctx.lineWidth = 1;
+          poly(crate);
+          ctx.stroke();
+          contact(1376, 868, 110, 18, 0.5);
+          /* pedestal */
+          ctx.fillStyle = '#121824';
+          poly([
+            [cx - 9, cy + r - 12],
+            [cx + 9, cy + r - 12],
+            [cx + 13, 706],
+            [cx - 13, 706],
+          ]);
+          ctx.fill();
+          ctx.fillStyle = '#161d2b';
+          ctx.beginPath();
+          ctx.ellipse(cx, 706, 34, 9, 0, 0, 6.283);
+          ctx.fill();
+          /* cable trailing off the crate */
+          ctx.strokeStyle = '#0b0f18';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(cx + 10, 700);
+          ctx.bezierCurveTo(1450, 760, 1500, 840, 1430, 884);
+          ctx.stroke();
+
+          const osc = Math.sin(t * 0.3) * 0.34; /* head sweeping the room */
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.transform(Math.cos(osc), Math.sin(osc) * 0.1, 0, 1, 0, 0);
+          /* motor housing peeking out behind the cage */
+          ctx.fillStyle = '#0d121b';
+          ctx.beginPath();
+          ctx.ellipse(0, 0, r * 0.42, r * 0.4, 0, 0, 6.283);
+          ctx.fill();
+          ctx.fillStyle = '#0b0f18';
+          ctx.beginPath();
+          ctx.arc(0, 0, r + 8, 0, 6.283);
+          ctx.fill();
+          /* blades */
+          ctx.save();
+          ctx.rotate(t * 12.5);
+          ctx.globalAlpha = 0.42;
+          for (let i = 0; i < 3; i++) {
+            ctx.rotate(6.283 / 3);
+            ctx.fillStyle = '#38445a';
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.quadraticCurveTo(r * 0.74, -r * 0.44, r * 0.9, r * 0.1);
+            ctx.quadraticCurveTo(r * 0.44, r * 0.3, 0, 0);
+            ctx.fill();
+          }
+          ctx.restore();
+          ctx.globalAlpha = 0.15;
+          const bg = ctx.createRadialGradient(0, 0, r * 0.16, 0, 0, r);
+          bg.addColorStop(0, 'rgba(124,154,200,.55)');
+          bg.addColorStop(1, 'rgba(124,154,200,0)');
+          ctx.fillStyle = bg;
+          ctx.beginPath();
+          ctx.arc(0, 0, r, 0, 6.283);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+          /* guard */
+          ctx.strokeStyle = 'rgba(162,194,240,.22)';
+          ctx.lineWidth = 1.1;
+          for (let i = 1; i <= 6; i++) {
+            ctx.beginPath();
+            ctx.arc(0, 0, (r * i) / 6, 0, 6.283);
+            ctx.stroke();
+          }
+          ctx.lineWidth = 0.9;
+          for (let i = 0; i < 14; i++) {
+            const a = (i * 6.283) / 14;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+            ctx.stroke();
+          }
+          ctx.fillStyle = '#1a2130';
+          ctx.beginPath();
+          ctx.arc(0, 0, 11, 0, 6.283);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(176,204,245,.3)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(0, 0, r + 8, 0, 6.283);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        function desk() {
+          const top = [
+            [318, 660],
+            [1282, 660],
+            [1330, 742],
+            [270, 742],
+          ];
+          contact(800, 760, 540, 40, 0.55);
+          ctx.fillStyle = '#090c13';
+          ctx.fillRect(292, 772, 22, 96);
+          ctx.fillRect(1288, 772, 22, 96);
+          qfill(
+            [
+              [270, 742],
+              [1330, 742],
+              [1330, 784],
+              [270, 784],
+            ],
+            '#121724'
+          );
+          qfill(top, '#1c2331');
+          ctx.save();
+          ctx.globalAlpha = 0.09;
+          ctx.strokeStyle = '#39465e';
+          ctx.lineWidth = 1;
+          for (let i = 0; i < 10; i++) {
+            const a = qp(top, 0, i / 10),
+              b = qp(top, 1, i / 10);
+            ctx.beginPath();
+            ctx.moveTo(a[0], a[1]);
+            ctx.lineTo(b[0], b[1]);
+            ctx.stroke();
+          }
+          ctx.restore();
+          ctx.fillStyle = 'rgba(166,196,240,.17)';
+          ctx.fillRect(318, 658, 964, 2.2);
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.globalAlpha = 0.11;
+          const g = ctx.createLinearGradient(0, 660, 0, 742);
+          g.addColorStop(0, 'rgba(148,198,255,.55)');
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          poly(top);
+          ctx.fillStyle = g;
+          ctx.fill();
+          ctx.restore();
+          /* cables falling behind the desk */
+          ctx.strokeStyle = '#080b12';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(806, 676);
+          ctx.bezierCurveTo(840, 720, 880, 780, 910, 868);
+          ctx.stroke();
+          ctx.lineWidth = 2.4;
+          ctx.beginPath();
+          ctx.moveTo(620, 678);
+          ctx.bezierCurveTo(600, 730, 590, 800, 614, 870);
+          ctx.stroke();
+        }
+        function monitor(t) {
+          const x = 596,
+            y = 414,
+            w = 412,
+            h = 226;
+          contact(800, 684, 90, 14, 0.5);
+          ctx.fillStyle = '#131924';
+          ctx.fillRect(786, 640, 28, 40);
+          ctx.beginPath();
+          ctx.ellipse(800, 684, 68, 12, 0, 0, 6.283);
+          ctx.fill();
+          ctx.fillStyle = 'rgba(160,190,235,.12)';
+          ctx.fillRect(786, 640, 3, 40);
+          ctx.fillStyle = '#0e121b';
+          rr(x - 10, y - 10, w + 20, h + 22, 7);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(150,180,225,.16)';
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+          ctx.fillStyle = '#0a1120';
+          ctx.fillRect(x, y, w, h);
+
+          codeBlock(x, y + 17, w * 0.56, h - 17, 11, t * 13, 0.96);
+          ctx.fillStyle = '#0d1626';
+          ctx.fillRect(x, y, w * 0.56, 17);
+          ctx.fillStyle = '#16233a';
+          ctx.fillRect(x + 4, y + 3, 70, 14);
+          ctx.font = '8.5px ui-monospace, Menlo, monospace';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = '#8098bb';
+          ctx.fillText('sync-worker.js', x + 8, y + 10);
+          ctx.fillStyle = '#48587a';
+          ctx.fillText('queue.js', x + 82, y + 10);
+
+          const px = x + w * 0.56 + 2,
+            pw = w - w * 0.56 - 2;
+          ctx.fillStyle = '#0c1321';
+          ctx.fillRect(px, y, pw, h);
+          ctx.fillStyle = '#93aac9';
+          ctx.font = '9.5px ui-monospace, Menlo, monospace';
+          ctx.fillText('sprint 14 · night queue', px + 8, y + 13);
+          const cols = ['todo', 'doing', 'done'];
+          const cardCols = [
+            ['#5a6e95', '#4c6285', '#415479'],
+            ['#8a6b3f', '#7c6140'],
+            ['#497a5d', '#3e6a51', '#396048', '#365f45'],
+          ];
+          for (let c = 0; c < 3; c++) {
+            const cx = px + 8 + c * ((pw - 16) / 3),
+              cw = (pw - 16) / 3 - 5;
+            ctx.fillStyle = '#6d84a6';
+            ctx.font = '7.5px ui-monospace, Menlo, monospace';
+            ctx.fillText(cols[c], cx, y + 30);
+            cardCols[c].forEach((col, i) => {
+              const cy = y + 38 + i * 17;
+              ctx.globalAlpha =
+                c === 1 && i === 0 ? 0.82 + 0.18 * Math.sin(t * 1.3) : 1;
+              ctx.fillStyle = col;
+              rr(cx, cy, cw, 13, 2.5);
+              ctx.fill();
+              ctx.globalAlpha = 1;
+              ctx.fillStyle = 'rgba(14,20,32,.55)';
+              ctx.fillRect(cx + 4, cy + 4, cw * 0.6, 1.6);
+              ctx.fillRect(cx + 4, cy + 8, cw * 0.38, 1.6);
+            });
+          }
+          const chY = y + h - 58,
+            chX = px + 8,
+            chW = pw - 16,
+            chH = 44;
+          ctx.strokeStyle = 'rgba(118,144,184,.32)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(chX, chY);
+          ctx.lineTo(chX, chY + chH);
+          ctx.lineTo(chX + chW, chY + chH);
+          ctx.stroke();
+          ctx.strokeStyle = '#5fd0a8';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          for (let i = 0; i <= 10; i++) {
+            const xx = chX + (chW / 10) * i,
+              yy =
+                chY +
+                3 +
+                (chH - 8) * (i / 10) -
+                Math.sin(i * 1.4 + t * 0.22) * 2.6;
+            i ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy);
+          }
+          ctx.stroke();
+          ctx.strokeStyle = 'rgba(148,174,214,.22)';
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.moveTo(chX, chY + 3);
+          ctx.lineTo(chX + chW, chY + chH - 3);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          /* panel glass: scanlines, the window mirrored back, a corner sheen */
+          ctx.save();
+          ctx.globalAlpha = 0.05;
+          ctx.fillStyle = '#000';
+          for (let yy = y; yy < y + h; yy += 3) ctx.fillRect(x, yy, w, 1);
+          ctx.globalAlpha = 0.045;
+          ctx.fillStyle = '#9fc2ea';
+          poly([
+            [x + 250, y + 8],
+            [x + 366, y + 8],
+            [x + 330, y + 96],
+            [x + 214, y + 96],
+          ]);
+          ctx.fill();
+          ctx.globalAlpha = 0.05;
+          const sh = ctx.createLinearGradient(x, y, x + w, y + h);
+          sh.addColorStop(0, 'rgba(255,255,255,.55)');
+          sh.addColorStop(0.4, 'rgba(255,255,255,0)');
+          ctx.fillStyle = sh;
+          ctx.fillRect(x, y, w, h);
+          ctx.restore();
+        }
+        function laptop(t) {
+          const scr = [
+            [350, 492],
+            [588, 484],
+            [596, 636],
+            [342, 644],
+          ];
+          const base = [
+            [342, 644],
+            [596, 636],
+            [624, 690],
+            [314, 698],
+          ];
+          contact(468, 700, 150, 16, 0.45);
+          qfill(base, '#151b27');
+          ctx.strokeStyle = 'rgba(150,180,225,.15)';
+          ctx.lineWidth = 1;
+          poly(base);
+          ctx.stroke();
+          for (let r = 0; r < 4; r++)
+            for (let c = 0; c < 13; c++)
+              qfill(
+                qsub(
+                  base,
+                  0.08 + c * 0.066,
+                  0.14 + r * 0.15,
+                  0.08 + c * 0.066 + 0.05,
+                  0.14 + r * 0.15 + 0.1
+                ),
+                '#0c111a'
+              );
+          qfill(qsub(base, 0.34, 0.66, 0.62, 0.94), '#101620');
+          qfill(scr, '#0d121c');
+          const inner = qsub(scr, 0.035, 0.04, 0.965, 0.93);
+          poly(inner);
+          ctx.fillStyle = '#09101e';
+          ctx.fill();
+          ctx.save();
+          poly(inner);
+          ctx.clip();
+          codeBlock(346, 488, 262, 158, 10, t * 9.5 + 240, 0.95);
+          ctx.fillStyle = 'rgba(5,9,16,.92)';
+          ctx.fillRect(342, 596, 262, 50);
+          ctx.font = '9.5px ui-monospace, Menlo, monospace';
+          ctx.textBaseline = 'top';
+          ctx.fillStyle = '#5fd0a8';
+          ctx.fillText('$ npm run worker:dev', 354, 602);
+          ctx.fillStyle = '#7f95b3';
+          ctx.fillText('  watching 42 files…', 354, 615);
+          ctx.fillStyle = '#e6a45c';
+          ctx.fillText('  queue drained: 118', 354, 628);
+          if (Math.sin(t * 3.4) > 0) {
+            ctx.fillStyle = '#c3e88d';
+            ctx.fillRect(
+              354 + measure('  queue drained: 118', 9.5) + 3,
+              628,
+              5,
+              10
+            );
+          }
+          ctx.globalAlpha = 0.05;
+          ctx.fillStyle = '#000';
+          for (let yy = 486; yy < 644; yy += 3) ctx.fillRect(342, yy, 262, 1);
+          ctx.restore();
+          ctx.strokeStyle = 'rgba(150,185,235,.2)';
+          ctx.lineWidth = 1.2;
+          poly(scr);
+          ctx.stroke();
+        }
+        function keyboard() {
+          const q = [
+            [622, 698],
+            [962, 692],
+            [986, 738],
+            [600, 744],
+          ];
+          contact(792, 744, 210, 16, 0.4);
+          qfill(q, '#131926');
+          ctx.strokeStyle = 'rgba(155,185,230,.14)';
+          ctx.lineWidth = 1;
+          poly(q);
+          ctx.stroke();
+          for (let r = 0; r < 5; r++)
+            for (let c = 0; c < 15; c++) {
+              const k = qsub(
+                q,
+                0.035 + c * 0.0635,
+                0.09 + r * 0.175,
+                0.035 + c * 0.0635 + 0.048,
+                0.09 + r * 0.175 + 0.125
+              );
+              qfill(k, '#0b101a');
+              ctx.globalAlpha = 0.22;
+              qfill(qsub(k, 0, 0, 1, 0.22), '#2b3448');
+              ctx.globalAlpha = 1;
+            }
+          qfill(qsub(q, 0.28, 0.8, 0.72, 0.94), '#0b101a');
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.globalAlpha = 0.09;
+          const g = ctx.createLinearGradient(0, 692, 0, 744);
+          g.addColorStop(0, 'rgba(136,198,255,.8)');
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          poly(q);
+          ctx.fillStyle = g;
+          ctx.fill();
+          ctx.restore();
+        }
+        function mouse() {
+          contact(1032, 726, 38, 10, 0.4);
+          ctx.fillStyle = '#151c28';
+          ctx.beginPath();
+          ctx.ellipse(1032, 712, 26, 17, -0.06, 0, 6.283);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(150,185,235,.17)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(1032, 696);
+          ctx.lineTo(1032, 708);
+          ctx.stroke();
+        }
+        function notepads() {
+          contact(430, 756, 130, 14, 0.4);
+          const p1 = [
+            [330, 702],
+            [502, 696],
+            [524, 746],
+            [346, 754],
+          ];
+          qfill(p1, '#c7cedb');
+          ctx.globalAlpha = 0.22;
+          qfill(qsub(p1, 0, 0, 1, 0.12), '#8b94a4');
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = 'rgba(58,70,90,.5)';
+          ctx.lineWidth = 1;
+          for (let i = 1; i <= 4; i++) {
+            const a = qp(p1, 0.1, 0.18 * i + 0.12),
+              b = qp(p1, 0.62 + ((i * 7) % 3) * 0.12, 0.18 * i + 0.12);
+            ctx.beginPath();
+            ctx.moveTo(a[0], a[1]);
+            ctx.lineTo(b[0], b[1]);
+            ctx.stroke();
+          }
+          qfill(
+            [
+              [324, 740],
+              [494, 734],
+              [512, 764],
+              [334, 770],
+            ],
+            '#98a1b1'
+          );
+          ctx.save();
+          ctx.lineCap = 'round';
+          ctx.strokeStyle = '#2a3242';
+          ctx.lineWidth = 5;
+          ctx.beginPath();
+          ctx.moveTo(426, 758);
+          ctx.lineTo(538, 746);
+          ctx.stroke();
+          ctx.strokeStyle = '#dfa769';
+          ctx.lineWidth = 5;
+          ctx.beginPath();
+          ctx.moveTo(444, 770);
+          ctx.lineTo(554, 762);
+          ctx.stroke();
+          ctx.restore();
+          ctx.fillStyle = '#151c28';
+          ctx.fillRect(272, 694, 40, 30);
+          ctx.beginPath();
+          ctx.ellipse(292, 724, 20, 7, 0, 0, 6.283);
+          ctx.fill();
+          ctx.fillStyle = '#1b2433';
+          ctx.beginPath();
+          ctx.ellipse(292, 694, 20, 7, 0, 0, 6.283);
+          ctx.fill();
+          ctx.save();
+          ctx.lineCap = 'round';
+          ctx.lineWidth = 4;
+          ctx.strokeStyle = '#8fb4d9';
+          ctx.beginPath();
+          ctx.moveTo(288, 692);
+          ctx.lineTo(284, 656);
+          ctx.stroke();
+          ctx.strokeStyle = '#d98b7a';
+          ctx.beginPath();
+          ctx.moveTo(296, 692);
+          ctx.lineTo(302, 658);
+          ctx.stroke();
+          ctx.strokeStyle = '#cdd4e0';
+          ctx.beginPath();
+          ctx.moveTo(292, 692);
+          ctx.lineTo(294, 650);
+          ctx.stroke();
+          ctx.restore();
+        }
+        function mug(t) {
+          const cx = 1092,
+            cy = 672;
+          contact(cx, cy + 24, 44, 11, 0.55);
+          ctx.strokeStyle = '#ccd5e3';
+          ctx.lineWidth = 6;
+          ctx.beginPath();
+          ctx.arc(cx + 29, cy - 3, 13, -1.1, 1.1);
+          ctx.stroke();
+          ctx.fillStyle = '#e1e7f0';
+          ctx.beginPath();
+          ctx.moveTo(cx - 25, cy - 26);
+          ctx.lineTo(cx + 25, cy - 26);
+          ctx.lineTo(cx + 21, cy + 19);
+          ctx.quadraticCurveTo(cx, cy + 27, cx - 21, cy + 19);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = 'rgba(116,138,176,.32)';
+          ctx.fillRect(cx - 25, cy - 26, 9, 45);
+          ctx.fillStyle = 'rgba(255,255,255,.35)';
+          ctx.fillRect(cx + 13, cy - 24, 4, 40);
+          ctx.fillStyle = '#2b1b13';
+          ctx.beginPath();
+          ctx.ellipse(cx, cy - 26, 25, 7.6, 0, 0, 6.283);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(222,232,246,.55)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.ellipse(cx, cy - 26, 25, 7.6, 0, 0, 6.283);
+          ctx.stroke();
+          const wnd = windAt(t);
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.lineCap = 'round';
+          for (let i = 0; i < 4; i++) {
+            const ph = i * 1.7,
+              sx = cx - 11 + i * 7;
+            ctx.beginPath();
+            for (let k = 0; k <= 24; k++) {
+              const p = k / 24,
+                yy = cy - 30 - p * 136;
+              const xx =
+                sx +
+                Math.sin(p * 3.3 + t * 1.1 + ph) * (5 + p * 21) -
+                wnd * p * p * 34;
+              k ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy);
+            }
+            ctx.strokeStyle = 'rgba(214,232,255,' + (0.095 - i * 0.011) + ')';
+            ctx.lineWidth = 7 - i;
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+        function roomLight(t) {
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          const fl = 0.94 + 0.06 * Math.sin(t * 2.3) + 0.02 * Math.sin(t * 9.7);
+          glow(800, 540, 440, 'rgba(84,158,220,.5)', 0.19 * fl);
+          glow(468, 580, 270, 'rgba(104,176,232,.45)', 0.14 * fl);
+          glow(1092, 636, 150, 'rgba(228,158,88,.35)', 0.05);
+          ctx.restore();
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.globalAlpha = 0.045;
+          const g = ctx.createLinearGradient(0, 628, 0, 912);
+          g.addColorStop(0, 'rgba(126,166,222,.85)');
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = g;
+          ctx.fillRect(188, 628, 1224, 284);
+          ctx.restore();
+        }
+
+        /* ============================================================
+   NEAR LAYER — the chair
+   ============================================================ */
+        function chair(t) {
+          ctx.fillStyle = '#090c12';
+          rr(586, 748, 420, 196, 44);
+          ctx.fill();
+          ctx.save();
+          rr(612, 768, 368, 176, 36);
+          ctx.clip();
+          ctx.fillStyle = '#0c1019';
+          ctx.fillRect(586, 756, 424, 200);
+          ctx.strokeStyle = 'rgba(118,150,200,.06)';
+          ctx.lineWidth = 1;
+          for (let x = 616; x < 982; x += 11) {
+            ctx.beginPath();
+            ctx.moveTo(x, 762);
+            ctx.lineTo(x, 946);
+            ctx.stroke();
+          }
+          for (let y = 774; y < 946; y += 11) {
+            ctx.beginPath();
+            ctx.moveTo(610, y);
+            ctx.lineTo(986, y);
+            ctx.stroke();
+          }
+          ctx.restore();
+          ctx.fillStyle = '#0a0e16';
+          rr(668, 708, 252, 60, 27);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(146,192,248,.15)';
+          ctx.lineWidth = 2.2;
+          rr(586, 748, 420, 196, 44);
+          ctx.stroke();
+          rr(668, 708, 252, 60, 27);
+          ctx.stroke();
+          ctx.fillStyle = '#0b0f18';
+          rr(506, 834, 100, 30, 13);
+          ctx.fill();
+          rr(992, 834, 100, 30, 13);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(146,192,248,.11)';
+          ctx.lineWidth = 1.4;
+          rr(506, 834, 100, 30, 13);
+          ctx.stroke();
+          rr(992, 834, 100, 30, 13);
+          ctx.stroke();
+        }
+
+        /* ============================================================
+   COMPOSITE
+   ============================================================ */
+        function vignette() {
+          const g = ctx.createRadialGradient(830, 430, 240, 830, 430, 980);
+          g.addColorStop(0, 'rgba(0,0,0,0)');
+          g.addColorStop(0.6, 'rgba(0,0,0,.28)');
+          g.addColorStop(1, 'rgba(0,0,0,.82)');
+          ctx.fillStyle = g;
+          ctx.fillRect(0, 0, W, H);
+        }
+        function grade() {
+          /* cool shadows, warm highs, lifted blacks — a graded film look */
+          ctx.save();
+          ctx.globalCompositeOperation = 'overlay';
+          ctx.globalAlpha = 0.16;
+          const g = ctx.createLinearGradient(0, 0, W, H);
+          g.addColorStop(0, '#16324e');
+          g.addColorStop(0.55, '#2a2f3f');
+          g.addColorStop(1, '#4a2f1e');
+          ctx.fillStyle = g;
+          ctx.fillRect(0, 0, W, H);
+          ctx.restore();
+          ctx.globalAlpha = 0.05;
+          ctx.fillStyle = '#1d2c44';
+          ctx.fillRect(0, 0, W, H);
+          ctx.globalAlpha = 1;
+        }
+        function grainDraw() {
+          ctx.save();
+          ctx.globalAlpha = 0.05;
+          ctx.globalCompositeOperation = 'overlay';
+          if (!grainPat) grainPat = ctx.createPattern(grain, 'repeat');
+          ctx.translate(-Math.random() * 180, -Math.random() * 180);
+          ctx.fillStyle = grainPat;
+          ctx.fillRect(0, 0, W + 180, H + 180);
+          ctx.restore();
+        }
+
+        let last = performance.now(),
+          t0 = performance.now();
+        function frame(now) {
+          const dt = Math.min(0.05, (now - last) / 1000);
+          last = now;
+          const t = (now - t0) / 1000;
+          /* the camera breathes — barely, but it sells the depth */
+          const dxm = Math.sin(t * 0.12) * 3.4,
+            dym = Math.sin(t * 0.083 + 1) * 2.2;
+          const dxf = dxm * 0.16,
+            dyf = dym * 0.16;
+          const dxn = dxm * 2.1,
+            dyn = dym * 1.9;
+
+          /* --- far --- */
+          ctx = fctx;
+          fctx.setTransform(1, 0, 0, 1, 0, 0);
+          fctx.clearRect(0, 0, W, H);
+          fctx.save();
+          fctx.beginPath();
+          fctx.rect(WIN.x - 26, WIN.y - 26, WIN.w + 52, WIN.h + 52);
+          fctx.clip();
+          fctx.translate(dxf, dyf);
+          sky();
+          starsDraw(t);
+          moon(t);
+          cloudsDraw(t);
+          buildings(skylineB, t, -1);
+          buildings(farB, t, 0);
+          buildings(nearB, t, 1);
+          street(t);
+          rainFall(t, dt);
+          fctx.restore();
+
+          /* --- mid --- */
+          ctx = mctx;
+          mctx.setTransform(1, 0, 0, 1, 0, 0);
+          mctx.clearRect(0, 0, W, H);
+          room();
+          mctx.clearRect(WIN.x, WIN.y, WIN.w, WIN.h); /* punch the opening */
+          glass(t, dt);
+          windowFrame(t);
+          boards();
+          clothes(t);
+          shelf();
+          bed();
+          fan(t);
+          desk();
+          monitor(t);
+          laptop(t);
+          keyboard();
+          mouse();
+          notepads();
+          mug(t);
+          roomLight(t);
+
+          /* --- near --- */
+          ctx = nctx;
+          nctx.setTransform(1, 0, 0, 1, 0, 0);
+          nctx.clearRect(440, 660, 1180, 260);
+          chair(t);
+
+          /* --- composite --- */
+          ctx = mainCtx;
+          mainCtx.setTransform(1, 0, 0, 1, 0, 0);
+          mainCtx.fillStyle = '#04060b';
+          mainCtx.fillRect(0, 0, main.width, main.height);
+          mainCtx.setTransform(view.s, 0, 0, view.s, view.ox, view.oy);
+          mainCtx.textBaseline = 'alphabetic';
+
+          mainCtx.drawImage(farC, 0, 0);
+
+          /* bloom on the city lights */
+          bctx.clearRect(0, 0, 360, 202);
+          bctx.drawImage(farC, WIN.x, WIN.y, WIN.w, WIN.h, 0, 0, 360, 202);
+          mainCtx.save();
+          mainCtx.beginPath();
+          mainCtx.rect(WIN.x, WIN.y, WIN.w, WIN.h);
+          mainCtx.clip();
+          mainCtx.globalCompositeOperation = 'lighter';
+          mainCtx.globalAlpha = 0.3;
+          if (CAN_BLUR) mainCtx.filter = 'blur(3px)';
+          mainCtx.drawImage(bloomC, 0, 0, 360, 202, WIN.x, WIN.y, WIN.w, WIN.h);
+          mainCtx.filter = 'none';
+          mainCtx.restore();
+
+          /* the room, softly out of focus */
+          if (CAN_BLUR) mainCtx.filter = 'blur(2.3px)';
+          mainCtx.drawImage(midC, dxm, dym);
+          mainCtx.filter = 'none';
+          /* halation off the screens */
+          bctx.clearRect(0, 0, 360, 202);
+          bctx.drawImage(midC, 300, 400, 1000, 360, 0, 0, 360, 130);
+          mainCtx.save();
+          mainCtx.globalCompositeOperation = 'lighter';
+          mainCtx.globalAlpha = 0.16;
+          if (CAN_BLUR) mainCtx.filter = 'blur(5px)';
+          mainCtx.drawImage(
+            bloomC,
+            0,
+            0,
+            360,
+            130,
+            300 + dxm,
+            400 + dym,
+            1000,
+            360
+          );
+          mainCtx.filter = 'none';
+          mainCtx.restore();
+
+          /* the chair, well outside the focal plane */
+          if (CAN_BLUR) mainCtx.filter = 'blur(9px)';
+          mainCtx.drawImage(nearC, dxn, dyn);
+          mainCtx.filter = 'none';
+
+          ctx = mainCtx;
+          grade();
+          vignette();
+          grainDraw();
+
+          requestAnimationFrame(frame);
+        }
+        requestAnimationFrame(frame);
+
+        /* ============================================================
+   SOUND — slow, predictable, nothing that grabs attention
+   ============================================================ */
+        const Sound = (function () {
+          let AC = null,
+            master,
+            musicG,
+            beatG,
+            rainG,
+            conv,
+            comp,
+            running = false,
+            timer = null;
+          let NS = null,
+            NH = null,
+            nextT = 0,
+            step = 0,
+            melCount = 0;
+          const BPM = 62,
+            SIX = 60 / BPM / 4;
+
+          /* Am9 → Fmaj7 → Cmaj9 → Dm7/G : four bars, smooth voice leading, no surprises */
+          const PROG = [
+            { bass: 45, ch: [64, 67, 71, 74] },
+            { bass: 41, ch: [64, 65, 69, 72] },
+            { bass: 48, ch: [64, 67, 71, 74] },
+            { bass: 43, ch: [62, 65, 69, 72] },
+          ];
+          const MEL = [76, 79, 72, 74];
+          const f = m => 440 * Math.pow(2, (m - 69) / 12);
+
+          function nbuf(sec) {
+            const n = Math.floor(AC.sampleRate * sec),
+              b = AC.createBuffer(2, n, AC.sampleRate);
+            for (let c = 0; c < 2; c++) {
+              const d = b.getChannelData(c);
+              for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+            }
+            return b;
+          }
+          function cbuf(sec) {
+            const n = Math.floor(AC.sampleRate * sec),
+              b = AC.createBuffer(1, n, AC.sampleRate),
+              d = b.getChannelData(0);
+            for (let i = 0; i < n; i++)
+              d[i] =
+                Math.random() < 0.0006
+                  ? (Math.random() * 2 - 1) * 0.6
+                  : (Math.random() * 2 - 1) * 0.01;
+            return b;
+          }
+          function ir() {
+            const dur = 3.4,
+              n = Math.floor(AC.sampleRate * dur),
+              b = AC.createBuffer(2, n, AC.sampleRate);
+            for (let c = 0; c < 2; c++) {
+              const d = b.getChannelData(c);
+              for (let i = 0; i < n; i++)
+                d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2.9);
+            }
+            return b;
+          }
+
+          function build() {
+            AC = new (window.AudioContext || window.webkitAudioContext)();
+            master = AC.createGain();
+            master.gain.value = 0.62;
+            comp = AC.createDynamicsCompressor();
+            comp.threshold.value = -24;
+            comp.knee.value = 28;
+            comp.ratio.value = 2.6;
+            comp.attack.value = 0.02;
+            comp.release.value = 0.35;
+            const lp = AC.createBiquadFilter();
+            lp.type = 'lowpass';
+            lp.frequency.value = 2500;
+            lp.Q.value = 0.4;
+            const hp = AC.createBiquadFilter();
+            hp.type = 'highpass';
+            hp.frequency.value = 42;
+            const wow = AC.createDelay(0.05);
+            wow.delayTime.value = 0.011;
+            const lfo = AC.createOscillator();
+            lfo.frequency.value = 0.36;
+            const lg = AC.createGain();
+            lg.gain.value = 0.0026;
+            lfo.connect(lg);
+            lg.connect(wow.delayTime);
+            lfo.start();
+            master.connect(comp);
+            comp.connect(lp);
+            lp.connect(hp);
+            hp.connect(wow);
+            wow.connect(AC.destination);
+
+            conv = AC.createConvolver();
+            conv.buffer = ir();
+            const vg = AC.createGain();
+            vg.gain.value = 0.34;
+            conv.connect(vg);
+            vg.connect(master);
+
+            musicG = AC.createGain();
+            musicG.gain.value = 0.46;
+            musicG.connect(master);
+            beatG = AC.createGain();
+            beatG.gain.value = 0.34;
+            beatG.connect(master);
+            rainG = AC.createGain();
+            rainG.gain.value = 0.52;
+            rainG.connect(master);
+
+            const nb = nbuf(5);
+            NS = nbuf(0.3);
+            NH = nbuf(0.12);
+            /* rain: body, patter, and a low roof rumble */
+            const mkRain = (type, freq, q, gain) => {
+              const s = AC.createBufferSource();
+              s.buffer = nb;
+              s.loop = true;
+              const fl = AC.createBiquadFilter();
+              fl.type = type;
+              fl.frequency.value = freq;
+              if (q) fl.Q.value = q;
+              const g = AC.createGain();
+              g.gain.value = gain;
+              s.connect(fl);
+              fl.connect(g);
+              g.connect(rainG);
+              s.start();
+              return fl;
+            };
+            const body = mkRain('lowpass', 1150, 0.4, 0.3);
+            mkRain('bandpass', 3200, 0.7, 0.075);
+            mkRain('lowpass', 220, 0, 0.15);
+            /* the shower swells and eases — very slowly */
+            const gl = AC.createOscillator();
+            gl.frequency.value = 0.045;
+            const gg = AC.createGain();
+            gg.gain.value = 300;
+            gl.connect(gg);
+            gg.connect(body.frequency);
+            gl.start();
+
+            const cs = AC.createBufferSource();
+            cs.buffer = cbuf(8);
+            cs.loop = true;
+            const cf = AC.createBiquadFilter();
+            cf.type = 'highpass';
+            cf.frequency.value = 1500;
+            const cg = AC.createGain();
+            cg.gain.value = 0.075;
+            cs.connect(cf);
+            cf.connect(cg);
+            cg.connect(musicG);
+            cs.start();
+          }
+
+          /* Rhodes-ish: sine body, quiet octave, long release */
+          function keysNote(freq, t, dur, vel) {
+            const g = AC.createGain();
+            const fl = AC.createBiquadFilter();
+            fl.type = 'lowpass';
+            fl.frequency.setValueAtTime(1100 + vel * 900, t);
+            fl.frequency.exponentialRampToValueAtTime(420, t + dur * 0.9);
+            const o1 = AC.createOscillator();
+            o1.type = 'sine';
+            o1.frequency.value = freq;
+            const o2 = AC.createOscillator();
+            o2.type = 'sine';
+            o2.frequency.value = freq * 2;
+            const g2 = AC.createGain();
+            g2.gain.value = 0.1;
+            const o3 = AC.createOscillator();
+            o3.type = 'triangle';
+            o3.frequency.value = freq * 0.999;
+            const g3 = AC.createGain();
+            g3.gain.value = 0.22;
+            o1.connect(fl);
+            o2.connect(g2);
+            g2.connect(fl);
+            o3.connect(g3);
+            g3.connect(fl);
+            fl.connect(g);
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.exponentialRampToValueAtTime(vel * 0.13, t + 0.06);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+            g.connect(musicG);
+            g.connect(conv);
+            o1.start(t);
+            o2.start(t);
+            o3.start(t);
+            o1.stop(t + dur + 0.1);
+            o2.stop(t + dur + 0.1);
+            o3.stop(t + dur + 0.1);
+          }
+          function bassNote(freq, t, dur, vel) {
+            const o = AC.createOscillator();
+            o.type = 'sine';
+            o.frequency.value = freq;
+            const o2 = AC.createOscillator();
+            o2.type = 'triangle';
+            o2.frequency.value = freq;
+            const g2 = AC.createGain();
+            g2.gain.value = 0.08;
+            const fl = AC.createBiquadFilter();
+            fl.type = 'lowpass';
+            fl.frequency.value = 280;
+            const g = AC.createGain();
+            o.connect(fl);
+            o2.connect(g2);
+            g2.connect(fl);
+            fl.connect(g);
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.exponentialRampToValueAtTime(vel * 0.26, t + 0.07);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+            g.connect(musicG);
+            o.start(t);
+            o2.start(t);
+            o.stop(t + dur + 0.1);
+            o2.stop(t + dur + 0.1);
+          }
+          function padChord(notes, t, dur) {
+            for (const n of notes) {
+              const o = AC.createOscillator();
+              o.type = 'sawtooth';
+              o.frequency.value = f(n);
+              const d = AC.createOscillator();
+              d.type = 'sawtooth';
+              d.frequency.value = f(n) * 1.0035;
+              const fl = AC.createBiquadFilter();
+              fl.type = 'lowpass';
+              fl.frequency.value = 680;
+              fl.Q.value = 0.5;
+              const g = AC.createGain();
+              o.connect(fl);
+              d.connect(fl);
+              fl.connect(g);
+              g.gain.setValueAtTime(0.0001, t);
+              g.gain.linearRampToValueAtTime(0.014, t + dur * 0.45);
+              g.gain.linearRampToValueAtTime(0.0001, t + dur);
+              g.connect(musicG);
+              g.connect(conv);
+              o.start(t);
+              d.start(t);
+              o.stop(t + dur + 0.2);
+              d.stop(t + dur + 0.2);
+            }
+          }
+          function leadNote(freq, t, dur, vel) {
+            const o = AC.createOscillator();
+            o.type = 'sine';
+            o.frequency.value = freq;
+            const vib = AC.createOscillator();
+            vib.frequency.value = 4.6;
+            const vg = AC.createGain();
+            vg.gain.value = 2.2;
+            vib.connect(vg);
+            vg.connect(o.frequency);
+            vib.start(t);
+            vib.stop(t + dur + 0.1);
+            const fl = AC.createBiquadFilter();
+            fl.type = 'lowpass';
+            fl.frequency.value = 1700;
+            const g = AC.createGain();
+            o.connect(fl);
+            fl.connect(g);
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.linearRampToValueAtTime(vel * 0.07, t + 0.22);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+            g.connect(musicG);
+            g.connect(conv);
+            o.start(t);
+            o.stop(t + dur + 0.15);
+          }
+          function kick(t, vel) {
+            const o = AC.createOscillator();
+            o.type = 'sine';
+            o.frequency.setValueAtTime(116, t);
+            o.frequency.exponentialRampToValueAtTime(42, t + 0.13);
+            const g = AC.createGain();
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.exponentialRampToValueAtTime(vel * 0.5, t + 0.01);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + 0.34);
+            o.connect(g);
+            g.connect(beatG);
+            o.start(t);
+            o.stop(t + 0.38);
+          }
+          function brush(t, vel) {
+            const s = AC.createBufferSource();
+            s.buffer = NS;
+            const bp = AC.createBiquadFilter();
+            bp.type = 'bandpass';
+            bp.frequency.value = 1500;
+            bp.Q.value = 0.7;
+            const g = AC.createGain();
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.linearRampToValueAtTime(vel * 0.085, t + 0.03);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+            s.connect(bp);
+            bp.connect(g);
+            g.connect(beatG);
+            g.connect(conv);
+            s.start(t);
+            s.stop(t + 0.3);
+          }
+          function hat(t, vel) {
+            const s = AC.createBufferSource();
+            s.buffer = NH;
+            const hp = AC.createBiquadFilter();
+            hp.type = 'highpass';
+            hp.frequency.value = 8200;
+            const g = AC.createGain();
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.exponentialRampToValueAtTime(vel * 0.032, t + 0.004);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+            s.connect(hp);
+            hp.connect(g);
+            g.connect(beatG);
+            s.start(t);
+            s.stop(t + 0.14);
+          }
+
+          function schedule(s, t) {
+            const barI = Math.floor(s / 16) % 4,
+              b = s % 16,
+              c = PROG[barI];
+            if (b === 0) {
+              bassNote(f(c.bass), t, 2.0, 1);
+              c.ch.forEach((n, i) =>
+                keysNote(f(n), t + i * 0.022, 2.6, i === 0 ? 0.95 : 0.72)
+              );
+              padChord(c.ch, t, 4.0);
+            }
+            if (b === 8) {
+              c.ch.forEach((n, i) => {
+                if (i % 2 === 1) keysNote(f(n), t + i * 0.02, 1.5, 0.34);
+              });
+            }
+            if (b === 12 && barI % 2 === 1)
+              bassNote(f(c.bass + 7), t, 0.9, 0.55);
+
+            /* half-time kit, soft and unhurried */
+            if (b === 0) kick(t, 1);
+            if (b === 11) kick(t + 0.02, 0.7);
+            if (b === 8) brush(t + 0.02, 1);
+            if (b % 4 === 0) hat(t, 0.75);
+            if (b % 4 === 2) hat(t + SIX * 0.18, 0.45);
+
+            /* one long melodic note every other bar, sometimes none */
+            if (b === 6 && barI % 2 === 0) {
+              melCount++;
+              if (melCount % 3 !== 0)
+                leadNote(f(MEL[melCount % MEL.length]), t, 2.1, 0.9);
+            }
+          }
+          function tick() {
+            while (nextT < AC.currentTime + 0.3) {
+              schedule(step, nextT);
+              step = (step + 1) % 64;
+              nextT += SIX;
+            }
+          }
+          return {
+            start() {
+              if (!AC) build();
+              if (AC.state === 'suspended') AC.resume();
+              if (running) return;
+              running = true;
+              nextT = AC.currentTime + 0.15;
+              step = 0;
+              timer = setInterval(tick, 45);
+            },
+            setMusic(on) {
+              if (musicG)
+                musicG.gain.setTargetAtTime(on ? 0.46 : 0, AC.currentTime, 0.4);
+            },
+            setBeat(on) {
+              if (beatG)
+                beatG.gain.setTargetAtTime(on ? 0.34 : 0, AC.currentTime, 0.4);
+            },
+            setRain(on) {
+              if (rainG)
+                rainG.gain.setTargetAtTime(on ? 0.52 : 0, AC.currentTime, 0.4);
+            },
+            setVol(v) {
+              if (master) master.gain.setTargetAtTime(v, AC.currentTime, 0.15);
+            },
+          };
+        })();
+
+        /* ---------- controls ---------- */
+        const curtain = document.getElementById('curtain'),
+          deck = document.getElementById('deck');
+        document.getElementById('go').addEventListener('click', () => {
+          try {
+            Sound.start();
+          } catch (e) {}
+          curtain.classList.add('gone');
+          deck.classList.add('show');
+          setTimeout(() => {
+            curtain.style.display = 'none';
+          }, 950);
+        });
+        function toggle(id, fn) {
+          const b = document.getElementById(id);
+          b.addEventListener('click', () => {
+            const on = b.getAttribute('aria-pressed') !== 'true';
+            b.setAttribute('aria-pressed', on ? 'true' : 'false');
+            fn(on);
+          });
+        }
+        toggle('mMusic', v => Sound.setMusic(v));
+        toggle('mBeat', v => Sound.setBeat(v));
+        toggle('mRain', v => Sound.setRain(v));
+        document
+          .getElementById('vol')
+          .addEventListener('input', e =>
+            Sound.setVol((Number(e.target.value) / 100) * 0.85)
+          );
+        let idle = null;
+        ['mousemove', 'touchstart', 'keydown'].forEach(e =>
+          window.addEventListener(
+            e,
+            () => {
+              deck.classList.add('show');
+              clearTimeout(idle);
+              idle = setTimeout(() => {
+                if (curtain.style.display === 'none')
+                  deck.classList.remove('show');
+              }, 4000);
+            },
+            { passive: true }
+          )
+        );
+      })();
+    </script>
+  </body>
+</html>
